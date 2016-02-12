@@ -26,7 +26,7 @@ mongod --dbpath data/mongodb
 mkdir -p data/redis
 redis-server redis.conf
 ```
-* Ruby (Ruby will also require the Gems)
+* Node.js + `npm install pg`
 
 # Examples
 
