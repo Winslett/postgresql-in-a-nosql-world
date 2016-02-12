@@ -46,12 +46,19 @@ db.people.update({"properties.hair": "brown"}, {"$set": {"properties.hair": "blo
 ```
 
 # Indexing JSON data
+
+**Setup**
+First, let's load some data:
+```bash
+for i in `seq 0 1000`; do 
+  psql nosql_test -c "INSERT INTO people (name, properties) VALUES ('random', '{\"height\":$i,\"weight\":$(($i/10)),\"hair\":\"brown\"}')";
+  echo "db.people.insert({name: 'random', properties: {height: $i, weight: $i/10}})" | mongo
+done
+```
+
 **postgres**
 ```SQL
-CREATE INDEX people_hair_index ON people USING GIN ((properties -> 'hair'));
-EXPLAIN SELECT * FROM people WHERE properties ->> 'hair' = 'blonde'; // WAT!
-
-CREATE INDEX people_properties ON people USING GIN ((properties));
+CREATE INDEX people_properties ON people USING GIN (properties);
 EXPLAIN SELECT * FROM people WHERE properties @> '{"hair":"blonde"}'; // WAT!
 ```
 
@@ -65,6 +72,9 @@ db.people.find({hair: "brown"}).explain()
 **postgres**
 ```SQL
 // Postgres will not use the indexes to make this query more efficient
+CREATE INDEX people_hair_index ON people USING GIN ((properties -> 'hair'));
+EXPLAIN SELECT * FROM people WHERE properties ->> 'hair' = 'blonde'; // WAT!
+
 CREATE INDEX people_weight_index ON people USING GIN ((properties -> 'weight'));
 CREATE INDEX people_height_index ON people USING GIN ((properties -> 'height'));
 
@@ -80,7 +90,9 @@ WHERE true
 
 **mongodb**
 ```json
-// MongoDB will not use the indexes to make this query more efficient
+db.people.ensureIndex({"properties.height": 1});
+db.people.ensureIndex({"properties.weight": 1});
+
 db.people.find({
   "properties.hair": "blonde",
   "properties.weight": {$gt: 80},
@@ -127,18 +139,22 @@ CREATE TABLE employees (id SERIAL PRIMARY KEY, user_id INT, employer_id INT, rol
 CREATE TABLE employers (id SERIAL PRIMARY KEY, name VARCHAR(255));
 CREATE TABLE pets (id SERIAL PRIMARY KEY, user_id INT, name VARCHAR(255), type VARCHAR(255), dob TIMESTAMP);
 
-WITH inserted_user AS (
-  INSERT INTO users (name) VALUES ('Chris') RETURNING *
-), inserted_employer AS (
-  INSERT INTO employers (name) VALUES ('Compose') RETURNING *
-)
-INSERT INTO properties (user_id, key, value) VALUES ((SELECT id FROM inserted_user), 'height', 182);
+BEGIN;
+  CREATE LOCAL TEMPORARY TABLE current_vars (user_id INT, employer_id INT);
+  WITH inserted_user AS (
+    INSERT INTO users (name) VALUES ('Chris') RETURNING *
+  ), inserted_employer AS (
+    INSERT INTO employers (name) VALUES ('Compose') RETURNING *
+  )
+  INSERT INTO current_vars (user_id, employer_id) VALUES ((SELECT id FROM inserted_user), (SELECT id FROM inserted_employer));
 
-// INSERT INTO properties (user_id, key, value) VALUES ((SELECT id FROM user), 'weight', 94);
-// INSERT INTO properties (user_id, key, value) VALUES ((SELECT id FROM user), 'hair', "brown");
-// INSERT INTO employees (user_id, employer_id, role) VALUES ((SELECT id FROM user), (SELECT id FROM employer) 'programmer');
-// INSERT INTO pets (user_id, name, type, dob) VALUES ((SELECT id FROM user), 'Samson', 'dog', '2007-08-14');
-// NSERT INTO pets (user_id, name, type, dob) VALUES ((SELECT id FROM user), 'Breeze', 'fish', '2015-06-14');
+  INSERT INTO properties (user_id, key, value) VALUES ((SELECT user_id FROM current_vars), 'height', 182);
+  INSERT INTO properties (user_id, key, value) VALUES ((SELECT user_id FROM current_vars), 'weight', 94);
+  INSERT INTO properties (user_id, key, value) VALUES ((SELECT user_id FROM current_vars), 'hair', 'brown');
+  INSERT INTO employees (user_id, employer_id, role) VALUES ((SELECT user_id FROM current_vars), (SELECT employer_id FROM current_vars), 'programmer');
+  INSERT INTO pets (user_id, name, type, dob) VALUES ((SELECT user_id FROM current_vars), 'Samson', 'dog', '2007-08-14');
+  INSERT INTO pets (user_id, name, type, dob) VALUES ((SELECT user_id FROM current_vars), 'Breeze', 'fish', '2015-06-14');
+COMMIT;
 
 SELECT
 	*
@@ -146,5 +162,5 @@ FROM users
 	LEFT JOIN properties ON users.id = properties.user_id
 	LEFT JOIN employees ON users.id = employees.user_id
 	LEFT JOIN employers ON employees.employer_id = employers.id
-	LEFT JOIN pets ON pets.id = employees.user_id;
+	LEFT JOIN pets ON pets.user_id = users.id;
 ```
