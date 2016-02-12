@@ -134,11 +134,11 @@ WITH inserted_user AS (
 )
 INSERT INTO properties (user_id, key, value) VALUES ((SELECT id FROM inserted_user), 'height', 182);
 
-INSERT INTO properties (user_id, key, value) VALUES ((SELECT id FROM user), 'weight', 94);
-INSERT INTO properties (user_id, key, value) VALUES ((SELECT id FROM user), 'hair', "brown");
-INSERT INTO employees (user_id, employer_id, role) VALUES ((SELECT id FROM user), (SELECT id FROM employer) 'programmer');
-INSERT INTO pets (user_id, name, type, dob) VALUES ((SELECT id FROM user), 'Samson', 'dog', '2007-08-14');
-INSERT INTO pets (user_id, name, type, dob) VALUES ((SELECT id FROM user), 'Breeze', 'fish', '2015-06-14');
+// INSERT INTO properties (user_id, key, value) VALUES ((SELECT id FROM user), 'weight', 94);
+// INSERT INTO properties (user_id, key, value) VALUES ((SELECT id FROM user), 'hair', "brown");
+// INSERT INTO employees (user_id, employer_id, role) VALUES ((SELECT id FROM user), (SELECT id FROM employer) 'programmer');
+// INSERT INTO pets (user_id, name, type, dob) VALUES ((SELECT id FROM user), 'Samson', 'dog', '2007-08-14');
+// NSERT INTO pets (user_id, name, type, dob) VALUES ((SELECT id FROM user), 'Breeze', 'fish', '2015-06-14');
 
 SELECT
 	*
