@@ -47,54 +47,104 @@ db.people.update({"properties.hair": "brown"}, {"$set": {"properties.hair": "blo
 
 # Indexing JSON data
 **postgres**
-```
+```SQL
 CREATE INDEX people_hair_index ON people USING GIN ((properties -> 'hair'));
+EXPLAIN SELECT * FROM people WHERE properties ->> 'hair' = 'blonde'; // WAT!
+
+CREATE INDEX people_properties ON people USING GIN ((properties));
+EXPLAIN SELECT * FROM people WHERE properties @> '{"hair":"blonde"}'; // WAT!
 ```
 
 **mongodb**
 ```
 db.people.ensureIndex({hair: 1});
+db.people.find({hair: "brown"}).explain()
+```
+
+# Complex queries and multiple Indexes
+**postgres**
+```SQL
+// Postgres will not use the indexes to make this query more efficient
+CREATE INDEX people_weight_index ON people USING GIN ((properties -> 'weight'));
+CREATE INDEX people_height_index ON people USING GIN ((properties -> 'height'));
+
+EXPLAIN
+SELECT
+  *
+FROM people
+WHERE true
+    AND properties ->> 'hair' = 'blonde'
+    AND (properties ->> 'weight')::int > 80
+    AND (properties ->> 'height')::int < 185;
+```
+
+**mongodb**
+```json
+// MongoDB will not use the indexes to make this query more efficient
+db.people.find({
+  "properties.hair": "blonde",
+  "properties.weight": {$gt: 80},
+  "properties.height": {$lt: 185}
+});
 ```
 
 # JSON Document Database versus Postgres
-Postgres can handle relational data or JSON data.  MongoDB / CouchDB can only handle JSON data.  Scaling relational data in a  NoSQL database ends in a bad time.
 
 **With JSON data, the complexity is in the document and the application**:
 
 ```
 {
-  user: Chris Winslet
-  properties: {
-		height: 82,
-		weight: 94,
-		hair: brown
+  "name": "Chris Winslett",
+  "properties": {
+		"height": 182,
+		"weight": 94,
+		"hair": "brown"
   },
-	employer: {
-		name: Compose,
-		role: Programmer
+	"employer": {
+		"name": "Compose",
+		"role": "Programmer"
 	},
-	pets: [
+	"pets": [
 		{
-			type: dog,
-			name: Samson,
-			dob: 8/1/2007
+			"type": "dog",
+			"name": "Samson",
+			"dob": new ISODate("2007-08-14")
 		},
 		{
-			type: fish,
-			name: Breeze,
-			dob: 6/14/2015
+			"type": "fish",
+			"name": "Breeze",
+			"dob": new ISODate("2015-06-14")
 		}
 	]
 }
 ```
 
-**With postgres, the complexity is in the defined schema and the query:
-```
+**With postgres, the complexity is in the defined schema and the query:**
+```SQL
+CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(255));
+CREATE TABLE properties (id SERIAL PRIMARY KEY, user_id INT, key VARCHAR(255), value VARCHAR(255));
+CREATE TABLE employees (id SERIAL PRIMARY KEY, user_id INT, employer_id INT, role VARCHAR(255));
+CREATE TABLE employers (id SERIAL PRIMARY KEY, name VARCHAR(255));
+CREATE TABLE pets (id SERIAL PRIMARY KEY, user_id INT, name VARCHAR(255), type VARCHAR(255), dob TIMESTAMP);
+
+WITH inserted_user AS (
+  INSERT INTO users (name) VALUES ('Chris') RETURNING *
+), inserted_employer AS (
+  INSERT INTO employers (name) VALUES ('Compose') RETURNING *
+)
+INSERT INTO properties (user_id, key, value) VALUES ((SELECT id FROM inserted_user), 'height', 182);
+
+INSERT INTO properties (user_id, key, value) VALUES ((SELECT id FROM user), 'weight', 94);
+INSERT INTO properties (user_id, key, value) VALUES ((SELECT id FROM user), 'hair', "brown");
+INSERT INTO employees (user_id, employer_id, role) VALUES ((SELECT id FROM user), (SELECT id FROM employer) 'programmer');
+INSERT INTO pets (user_id, name, type, dob) VALUES ((SELECT id FROM user), 'Samson', 'dog', '2007-08-14');
+INSERT INTO pets (user_id, name, type, dob) VALUES ((SELECT id FROM user), 'Breeze', 'fish', '2015-06-14');
+
 SELECT
 	*
 FROM users
 	LEFT JOIN properties ON users.id = properties.user_id
-	LEFT JOIN employee ON users.id = employee.user_id
-		LEFT JOIN employer ON employee.employer_id = employers.id
-	LEFT JOIN pets ON pets.id = employee.user_id
+	LEFT JOIN employees ON users.id = employees.user_id
+	LEFT JOIN employers ON employees.employer_id = employers.id
+	LEFT JOIN pets ON pets.id = employees.user_id;
 ```
