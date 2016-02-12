@@ -58,6 +58,7 @@ SET batman alfred
 DELETE FROM kv_store WHERE key = 'batman';
 ```
 **redis**
+```
 DEL batman
 ```
 
