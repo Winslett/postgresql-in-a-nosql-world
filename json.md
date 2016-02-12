@@ -134,10 +134,14 @@ db.people.find({
 **With postgres, the complexity is in the defined schema and the query:**
 ```SQL
 CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(255));
-CREATE TABLE properties (id SERIAL PRIMARY KEY, user_id INT, key VARCHAR(255), value VARCHAR(255));
-CREATE TABLE employees (id SERIAL PRIMARY KEY, user_id INT, employer_id INT, role VARCHAR(255));
+CREATE TABLE properties (id SERIAL PRIMARY KEY, user_id INT REFERENCES users(id), key VARCHAR(255), value VARCHAR(255));
+CREATE TABLE employees (id SERIAL PRIMARY KEY, user_id INT REFERENCES users(id), employer_id INT, role VARCHAR(255));
 CREATE TABLE employers (id SERIAL PRIMARY KEY, name VARCHAR(255));
-CREATE TABLE pets (id SERIAL PRIMARY KEY, user_id INT, name VARCHAR(255), type VARCHAR(255), dob TIMESTAMP);
+CREATE TABLE pets (id SERIAL PRIMARY KEY, user_id INT REFERENCES users(id), name VARCHAR(255), type VARCHAR(255), dob TIMESTAMP);
+
+CREATE INDEX properties_user_id ON properties (user_id);
+CREATE INDEX employees_user_id ON employees (user_id);
+CREATE INDEX pets_user_id ON pets (user_id);
 
 BEGIN;
   CREATE LOCAL TEMPORARY TABLE current_vars (user_id INT, employer_id INT);
@@ -157,10 +161,18 @@ BEGIN;
 COMMIT;
 
 SELECT
+  *
+FROM users
+  LEFT JOIN properties ON users.id = properties.user_id;
+
+SELECT
 	*
 FROM users
-	LEFT JOIN properties ON users.id = properties.user_id
 	LEFT JOIN employees ON users.id = employees.user_id
-	LEFT JOIN employers ON employees.employer_id = employers.id
-	LEFT JOIN pets ON pets.user_id = users.id;
+	LEFT JOIN employers ON employees.employer_id = employers.id;
+
+SELECT
+  *
+FROM users
+  LEFT JOIN pets ON users.id = pets.user_id;
 ```
